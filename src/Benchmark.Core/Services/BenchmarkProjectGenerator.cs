@@ -276,15 +276,18 @@ internal class CodeTemplateBuilder
 
     private string CreateDefaultArgument(string typeIdentifier)
     {
-        if (typeIdentifier.Contains("string")) return "\"sample\"";
-        if (typeIdentifier.Contains("int")) return "42";
-        if (typeIdentifier.Contains("long")) return "42L";
-        if (typeIdentifier.Contains("bool")) return "true";
-        if (typeIdentifier.Contains("double")) return "42.0";
-        if (typeIdentifier.Contains("float")) return "42.0f";
-        if (typeIdentifier.Contains("decimal")) return "42m";
-        if (typeIdentifier.Contains("DateTime")) return "DateTime.UtcNow";
-        if (typeIdentifier.Contains("Guid")) return "Guid.NewGuid()";
+        // Match exact type names to avoid false positives
+        var normalizedType = typeIdentifier.Trim();
+        
+        if (normalizedType == "string" || normalizedType == "System.String") return "\"sample\"";
+        if (normalizedType == "int" || normalizedType == "System.Int32") return "42";
+        if (normalizedType == "long" || normalizedType == "System.Int64") return "42L";
+        if (normalizedType == "bool" || normalizedType == "System.Boolean") return "true";
+        if (normalizedType == "double" || normalizedType == "System.Double") return "42.0";
+        if (normalizedType == "float" || normalizedType == "System.Single") return "42.0f";
+        if (normalizedType == "decimal" || normalizedType == "System.Decimal") return "42m";
+        if (normalizedType == "DateTime" || normalizedType == "System.DateTime") return "DateTime.UtcNow";
+        if (normalizedType == "Guid" || normalizedType == "System.Guid") return "Guid.NewGuid()";
         
         return "default";
     }
@@ -305,6 +308,18 @@ internal class SolutionManager
         };
 
         using var process = System.Diagnostics.Process.Start(processInfo);
-        process?.WaitForExit();
+        if (process == null)
+        {
+            throw new InvalidOperationException("Failed to start dotnet process");
+        }
+        
+        process.WaitForExit();
+        
+        if (process.ExitCode != 0)
+        {
+            var errorOutput = process.StandardError.ReadToEnd();
+            throw new InvalidOperationException(
+                $"Failed to add project to solution. Exit code: {process.ExitCode}. Error: {errorOutput}");
+        }
     }
 }

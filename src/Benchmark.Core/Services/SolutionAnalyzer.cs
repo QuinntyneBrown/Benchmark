@@ -157,14 +157,28 @@ public class SolutionAnalyzer : ISolutionAnalyzer
         var projectFilePath = projectToCheck.FilePath ?? string.Empty;
         if (string.IsNullOrEmpty(projectFilePath)) return ProjectType.Unknown;
 
-        var fileContent = File.ReadAllText(projectFilePath);
+        if (!File.Exists(projectFilePath)) return ProjectType.Unknown;
 
-        var isExecutable = fileContent.Contains("<OutputType>Exe</OutputType>");
+        // Stream the file to check for specific patterns
+        var isExecutable = false;
+        var isWebProject = false;
+
+        foreach (var line in File.ReadLines(projectFilePath))
+        {
+            if (line.Contains("<OutputType>Exe</OutputType>"))
+            {
+                isExecutable = true;
+            }
+            if (line.Contains("Microsoft.AspNetCore") || line.Contains("Microsoft.NET.Sdk.Web"))
+            {
+                isWebProject = true;
+            }
+            
+            // Early exit if we found both
+            if (isExecutable && isWebProject) break;
+        }
+
         if (!isExecutable) return ProjectType.ClassLibrary;
-
-        var isWebProject = fileContent.Contains("Microsoft.AspNetCore") || 
-                          fileContent.Contains("Microsoft.NET.Sdk.Web");
-        
         return isWebProject ? ProjectType.WebApi : ProjectType.Console;
     }
 }

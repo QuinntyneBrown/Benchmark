@@ -12,20 +12,15 @@ public class GenerateBenchmarksCommand : Command
             name: "solution-path",
             description: "Path to the .NET solution file (.sln)");
 
-        var verboseFlag = new Option<bool>(
-            aliases: new[] { "--verbose", "-v" },
-            description: "Enable verbose logging");
-
         AddArgument(pathArg);
-        AddOption(verboseFlag);
 
-        this.SetHandler(async (solutionFilePath, enableVerbose) =>
+        this.SetHandler(async (solutionFilePath) =>
         {
-            await ExecuteGenerationWorkflow(solutionFilePath, enableVerbose);
-        }, pathArg, verboseFlag);
+            await ExecuteGenerationWorkflow(solutionFilePath);
+        }, pathArg);
     }
 
-    private async Task<int> ExecuteGenerationWorkflow(string solutionFilePath, bool verboseMode)
+    private async Task<int> ExecuteGenerationWorkflow(string solutionFilePath)
     {
         var container = Program.ServiceProvider;
         var logFactory = container.GetService(typeof(ILoggerFactory)) as ILoggerFactory;
