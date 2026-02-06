@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Apollo.SignalProcessor/Apollo.SignalProcessor.csproj" />
+  </Folder>
+</Solution>

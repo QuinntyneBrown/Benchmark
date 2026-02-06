@@ -6,6 +6,7 @@ public class ProjectInfo
     public string Path { get; set; } = string.Empty;
     public List<ClassInfo> Classes { get; set; } = new();
     public ProjectType Type { get; set; }
+    public HubEndpointInfo? HubEndpoint { get; set; }
 }
 
 public enum ProjectType

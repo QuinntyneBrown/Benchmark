@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Artemis.TelemetryRelay/Artemis.TelemetryRelay.csproj" />
+  </Folder>
+</Solution>

@@ -98,14 +98,21 @@ public class RunAndReportCommand : Command
             }
 
             await reportGenerator.GenerateMarkdownReportAsync(summaries, outputPath);
-            commandLogger?.LogInformation("Report generated at: {Path}", outputPath);
+            commandLogger?.LogInformation("Technical report generated at: {Path}", outputPath);
+
+            var productOwnerReportPath = Path.Combine(
+                Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory(),
+                "ProductOwnerReport.md");
+            await reportGenerator.GenerateProductOwnerReportAsync(summaries, productOwnerReportPath);
+            commandLogger?.LogInformation("Product owner report generated at: {Path}", productOwnerReportPath);
 
             // Step 4: Summary
             commandLogger?.LogInformation("Step 4/4: Workflow completed!");
             commandLogger?.LogInformation("===================================");
             commandLogger?.LogInformation("Benchmark execution summary:");
             commandLogger?.LogInformation("  - Total benchmarks run: {Count}", summaries.SelectMany(s => s.Results).Count());
-            commandLogger?.LogInformation("  - Report location: {Path}", outputPath);
+            commandLogger?.LogInformation("  - Technical report: {Path}", outputPath);
+            commandLogger?.LogInformation("  - Product owner report: {Path}", productOwnerReportPath);
             commandLogger?.LogInformation("===================================");
 
             return 0;

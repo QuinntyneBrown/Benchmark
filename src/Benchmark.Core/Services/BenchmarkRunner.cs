@@ -27,7 +27,7 @@ public class BenchmarkRunner : IBenchmarkRunner
             var processInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = "run -c Release -- --exporters json",
+                Arguments = "run -c Release -- --filter * --exporters json",
                 WorkingDirectory = projectPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -41,11 +41,17 @@ public class BenchmarkRunner : IBenchmarkRunner
                 throw new InvalidOperationException("Failed to start benchmark process");
             }
 
+            // Read stdout/stderr concurrently to avoid deadlock when buffer fills
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
+            var standardOutput = await stdoutTask;
+            var errorOutput = await stderrTask;
+
+            _logger?.LogDebug("Benchmark stdout length: {Length} chars", standardOutput.Length);
 
             if (process.ExitCode != 0)
             {
-                var errorOutput = await process.StandardError.ReadToEndAsync();
                 summary.Success = false;
                 summary.ErrorMessage = $"Benchmark execution failed with exit code {process.ExitCode}: {errorOutput}";
                 return summary;
@@ -55,7 +61,7 @@ public class BenchmarkRunner : IBenchmarkRunner
             var resultsPath = Path.Combine(projectPath, "BenchmarkDotNet.Artifacts", "results");
             if (Directory.Exists(resultsPath))
             {
-                var jsonFiles = Directory.GetFiles(resultsPath, "*-report-full.json");
+                var jsonFiles = Directory.GetFiles(resultsPath, "*-report-full*.json");
                 foreach (var jsonFile in jsonFiles)
                 {
                     var results = await ParseBenchmarkResultsAsync(jsonFile);

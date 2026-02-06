@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Orion.AttitudeTracker/Orion.AttitudeTracker.csproj" />
+  </Folder>
+</Solution>

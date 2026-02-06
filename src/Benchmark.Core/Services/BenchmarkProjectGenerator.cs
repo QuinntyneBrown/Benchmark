@@ -31,6 +31,7 @@ public class BenchmarkProjectGenerator : IBenchmarkProjectGenerator
             foreach (var classData in projectData.Classes)
             {
                 var sourceCode = _templateBuilder.CreateUnitBenchmarkSource(classData);
+                if (sourceCode == null) continue;
                 var outputFile = Path.Combine(context.ProjectPath, $"{classData.Name}Benchmarks.cs");
                 await File.WriteAllTextAsync(outputFile, sourceCode);
             }
@@ -49,12 +50,14 @@ public class BenchmarkProjectGenerator : IBenchmarkProjectGenerator
 
         var executableProjects = projects.Where(p => p.Type != ProjectType.ClassLibrary).ToList();
         var needsWebTesting = executableProjects.Any(p => p.Type == ProjectType.WebApi);
+        var needsSignalRClient = executableProjects.Any(p => p.HubEndpoint != null);
 
         await _fileWriter.WriteProjectDefinitionAsync(
             context.ProjectPath,
             context.ProjectName,
             executableProjects.Select(p => p.Path).ToList(),
-            includeWebTestingPackage: needsWebTesting);
+            includeWebTestingPackage: needsWebTesting,
+            includeSignalRClientPackage: needsSignalRClient);
 
         foreach (var projectData in executableProjects)
         {
@@ -62,7 +65,8 @@ public class BenchmarkProjectGenerator : IBenchmarkProjectGenerator
                 ? _templateBuilder.CreateWebApiE2ESource(projectData)
                 : _templateBuilder.CreateConsoleE2ESource(projectData);
 
-            var outputFile = Path.Combine(context.ProjectPath, $"{projectData.Name}E2EBenchmarks.cs");
+            var safeProjectName = projectData.Name.Replace(".", "");
+            var outputFile = Path.Combine(context.ProjectPath, $"{safeProjectName}E2EBenchmarks.cs");
             await File.WriteAllTextAsync(outputFile, sourceCode);
         }
 
@@ -101,10 +105,11 @@ internal class BenchmarkGenerationContext
 internal class ProjectFileWriter
 {
     public async Task WriteProjectDefinitionAsync(
-        string targetDirectory, 
-        string projectName, 
+        string targetDirectory,
+        string projectName,
         List<string> referencedProjectPaths,
-        bool includeWebTestingPackage)
+        bool includeWebTestingPackage,
+        bool includeSignalRClientPackage = false)
     {
         var lines = new List<string>
         {
@@ -120,9 +125,18 @@ internal class ProjectFileWriter
             "    <PackageReference Include=\"BenchmarkDotNet\" Version=\"0.14.0\" />"
         };
 
+        lines.Add("    <PackageReference Include=\"Microsoft.Extensions.Logging.Abstractions\" Version=\"9.0.0\" />");
+        lines.Add("    <PackageReference Include=\"Microsoft.Extensions.Options\" Version=\"9.0.0\" />");
+        lines.Add("    <PackageReference Include=\"Microsoft.Extensions.Caching.Memory\" Version=\"9.0.0\" />");
+
         if (includeWebTestingPackage)
         {
             lines.Add("    <PackageReference Include=\"Microsoft.AspNetCore.Mvc.Testing\" Version=\"9.0.0\" />");
+        }
+
+        if (includeSignalRClientPackage)
+        {
+            lines.Add("    <PackageReference Include=\"Microsoft.AspNetCore.SignalR.Client\" Version=\"9.0.0\" />");
         }
 
         lines.Add("  </ItemGroup>");
@@ -166,41 +180,78 @@ internal class ProjectFileWriter
 
 internal class CodeTemplateBuilder
 {
-    public string CreateUnitBenchmarkSource(ClassInfo targetClass)
+    public string? CreateUnitBenchmarkSource(ClassInfo targetClass)
     {
-        var lines = new List<string>
+        // Skip infrastructure classes (Hub, BackgroundService, Controller)
+        if (targetClass.IsInfrastructureClass)
+            return null;
+
+        // Skip classes whose constructor parameters we cannot provide
+        if (!targetClass.ConstructorParameters.All(CanProvideConstructorParameter))
+            return null;
+
+        var usings = new List<string>
         {
-            "using BenchmarkDotNet.Attributes;",
-            $"using {targetClass.Namespace};",
-            "",
-            "namespace Benchmarks;",
-            "",
-            "[MemoryDiagnoser]",
-            $"public class {targetClass.Name}Benchmarks",
-            "{",
-            $"    private {targetClass.FullName}? _testSubject;",
-            "",
-            "    [GlobalSetup]",
-            "    public void Initialize()",
-            "    {",
-            $"        _testSubject = new {targetClass.FullName}();",
-            "    }",
-            ""
+            "using BenchmarkDotNet.Attributes;"
         };
+
+        if (targetClass.ConstructorParameters.Any(p => IsLoggerType(p.Type)))
+            usings.Add("using Microsoft.Extensions.Logging.Abstractions;");
+        if (targetClass.ConstructorParameters.Any(p => IsOptionsType(p.Type)))
+            usings.Add("using Microsoft.Extensions.Options;");
+        if (targetClass.ConstructorParameters.Any(p => IsMemoryCacheType(p.Type)))
+            usings.Add("using Microsoft.Extensions.Caching.Memory;");
+
+        var constructorArgs = BuildConstructorArguments(targetClass);
+
+        var lines = new List<string>();
+        lines.AddRange(usings);
+        lines.Add("");
+        lines.Add("namespace Benchmarks;");
+        lines.Add("");
+        lines.Add("[MemoryDiagnoser]");
+        lines.Add($"public class {targetClass.Name}Benchmarks");
+        lines.Add("{");
+        lines.Add($"    private {targetClass.FullName}? _testSubject;");
+        lines.Add("");
+        lines.Add("    [GlobalSetup]");
+        lines.Add("    public void Initialize()");
+        lines.Add("    {");
+        lines.Add($"        _testSubject = new {targetClass.FullName}({constructorArgs});");
+        lines.Add("    }");
+        lines.Add("");
 
         foreach (var methodData in targetClass.PublicMethods)
         {
-            lines.Add("    [Benchmark]");
-            var returnDeclaration = methodData.IsAsync ? "async Task" : "void";
-            lines.Add($"    public {returnDeclaration} Measure_{methodData.Name}()");
-            lines.Add("    {");
+            var isAsyncEnumerable = methodData.ReturnType.Contains("IAsyncEnumerable");
 
-            var invocation = BuildMethodInvocation(methodData);
-            var callLine = methodData.IsAsync 
-                ? $"        await _testSubject!.{invocation};"
-                : $"        _testSubject!.{invocation};";
-            
-            lines.Add(callLine);
+            lines.Add("    [Benchmark]");
+
+            if (isAsyncEnumerable)
+            {
+                lines.Add($"    public async Task Measure_{methodData.Name}()");
+                lines.Add("    {");
+                var invocation = BuildMethodInvocation(methodData);
+                lines.Add($"        await foreach (var _ in _testSubject!.{invocation})");
+                lines.Add("        {");
+                lines.Add("            break;");
+                lines.Add("        }");
+            }
+            else if (methodData.IsAsync)
+            {
+                lines.Add($"    public async Task Measure_{methodData.Name}()");
+                lines.Add("    {");
+                var invocation = BuildMethodInvocation(methodData);
+                lines.Add($"        await _testSubject!.{invocation};");
+            }
+            else
+            {
+                lines.Add($"    public void Measure_{methodData.Name}()");
+                lines.Add("    {");
+                var invocation = BuildMethodInvocation(methodData);
+                lines.Add($"        _testSubject!.{invocation};");
+            }
+
             lines.Add("    }");
             lines.Add("");
         }
@@ -211,6 +262,20 @@ internal class CodeTemplateBuilder
 
     public string CreateWebApiE2ESource(ProjectInfo webProject)
     {
+        if (webProject.HubEndpoint != null)
+        {
+            return CreateSignalRE2ESource(webProject, webProject.HubEndpoint);
+        }
+
+        return CreateHttpGetE2ESource(webProject);
+    }
+
+    private string CreateHttpGetE2ESource(ProjectInfo webProject)
+    {
+        var anchorClass = webProject.Classes.FirstOrDefault();
+        var anchorType = anchorClass?.FullName ?? $"{webProject.Name}.Program";
+        var safeName = webProject.Name.Replace(".", "");
+
         return string.Join(Environment.NewLine, new[]
         {
             "using BenchmarkDotNet.Attributes;",
@@ -219,48 +284,226 @@ internal class CodeTemplateBuilder
             "namespace Benchmarks;",
             "",
             "[MemoryDiagnoser]",
-            $"public class {webProject.Name}E2EBenchmarks",
+            $"public class {safeName}E2EBenchmarks",
             "{",
-            "    private HttpClient? _httpClient;",
+            $"    private WebApplicationFactory<{anchorType}> _factory = null!;",
+            "    private HttpClient _httpClient = null!;",
             "",
             "    [GlobalSetup]",
             "    public void Initialize()",
             "    {",
-            $"        // TODO: Configure WebApplicationFactory with your Program class from {webProject.Name}",
-            $"        // var testFactory = new WebApplicationFactory<Program>();",
-            $"        // _httpClient = testFactory.CreateClient();",
+            $"        _factory = new WebApplicationFactory<{anchorType}>();",
+            "        _httpClient = _factory.CreateClient();",
+            "    }",
+            "",
+            "    [GlobalCleanup]",
+            "    public void Cleanup()",
+            "    {",
+            "        _httpClient.Dispose();",
+            "        _factory.Dispose();",
             "    }",
             "",
             "    [Benchmark]",
-            "    public async Task MeasureApiEndpoint()",
+            "    public async Task MeasureRootEndpoint()",
             "    {",
-            "        // TODO: Update with your actual API endpoint",
-            "        // var result = await _httpClient!.GetAsync(\"/api/health\");",
-            "        // result.EnsureSuccessStatusCode();",
-            "        await Task.CompletedTask;",
+            "        using var response = await _httpClient.GetAsync(\"/\");",
             "    }",
             "}"
         });
     }
 
+    private string CreateSignalRE2ESource(ProjectInfo webProject, Models.HubEndpointInfo hub)
+    {
+        var anchorClass = webProject.Classes.FirstOrDefault();
+        var anchorType = anchorClass?.FullName ?? $"{webProject.Name}.Program";
+        var safeName = webProject.Name.Replace(".", "");
+
+        var lines = new List<string>
+        {
+            "using BenchmarkDotNet.Attributes;",
+            "using Microsoft.AspNetCore.Mvc.Testing;",
+            "using Microsoft.AspNetCore.SignalR.Client;",
+            "using Microsoft.AspNetCore.TestHost;",
+            "",
+            "namespace Benchmarks;",
+            "",
+            "[MemoryDiagnoser]",
+            $"public class {safeName}E2EBenchmarks",
+            "{",
+            $"    private WebApplicationFactory<{anchorType}> _factory = null!;",
+            "    private HubConnection _hubConnection = null!;",
+            "    private TaskCompletionSource<string> _messageReceived = null!;",
+            "",
+            "    [GlobalSetup]",
+            "    public async Task Initialize()",
+            "    {",
+            $"        _factory = new WebApplicationFactory<{anchorType}>();",
+            "        var server = _factory.Server;",
+            "        var handler = server.CreateHandler();",
+            "",
+            "        _hubConnection = new HubConnectionBuilder()",
+            $"            .WithUrl(\"http://localhost{hub.EndpointPath}\", options =>",
+            "            {",
+            "                options.HttpMessageHandlerFactory = _ => handler;",
+            "                options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.ServerSentEvents;",
+            "            })",
+            "            .Build();",
+            "",
+            "        _messageReceived = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);",
+            "",
+            $"        _hubConnection.On<string>(\"{hub.ClientCallbackMethod}\", message =>",
+            "        {",
+            "            _messageReceived.TrySetResult(message);",
+            "        });",
+            "",
+            "        await _hubConnection.StartAsync();",
+        };
+
+        if (!hub.UsesClientsAll)
+        {
+            lines.Add($"        await _hubConnection.InvokeAsync(\"Subscribe\", \"{hub.SubscriptionTopic}\");");
+        }
+
+        lines.AddRange(new[]
+        {
+            "    }",
+            "",
+            "    [IterationSetup]",
+            "    public void ResetCompletionSource()",
+            "    {",
+            "        _messageReceived = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);",
+            "    }",
+            "",
+            "    [GlobalCleanup]",
+            "    public async Task Cleanup()",
+            "    {",
+            "        if (_hubConnection != null)",
+            "        {",
+            "            await _hubConnection.DisposeAsync();",
+            "        }",
+            "        _factory?.Dispose();",
+            "    }",
+            "",
+            "    [Benchmark]",
+            "    public async Task<string> MeasureSignalRMessageFlow()",
+            "    {",
+            "        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));",
+            "        cts.Token.Register(() => _messageReceived.TrySetCanceled());",
+            "        return await _messageReceived.Task;",
+            "    }",
+            "}"
+        });
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
     public string CreateConsoleE2ESource(ProjectInfo consoleProject)
     {
+        var safeName = consoleProject.Name.Replace(".", "");
         return string.Join(Environment.NewLine, new[]
         {
+            "using System.Diagnostics;",
             "using BenchmarkDotNet.Attributes;",
             "",
             "namespace Benchmarks;",
             "",
             "[MemoryDiagnoser]",
-            $"public class {consoleProject.Name}E2EBenchmarks",
+            $"public class {safeName}E2EBenchmarks",
             "{",
-            "    [Benchmark]",
-            "    public void MeasureConsoleApp()",
+            "    private string _executablePath = null!;",
+            "",
+            "    [GlobalSetup]",
+            "    public void Initialize()",
             "    {",
-            $"        // TODO: Add console application execution logic for {consoleProject.Name}",
+            $"        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, \"..\", \"..\", \"..\", \"..\", \"src\", \"{consoleProject.Name}\"));",
+            "        _executablePath = Path.Combine(projectDir, \"bin\", \"Release\", \"net9.0\", " +
+                $"\"{consoleProject.Name}.exe\");",
+            "    }",
+            "",
+            "    [Benchmark]",
+            "    public void MeasureConsoleExecution()",
+            "    {",
+            "        using var process = Process.Start(new ProcessStartInfo",
+            "        {",
+            "            FileName = _executablePath,",
+            "            RedirectStandardOutput = true,",
+            "            RedirectStandardError = true,",
+            "            UseShellExecute = false,",
+            "            CreateNoWindow = true",
+            "        });",
+            "        process?.WaitForExit();",
             "    }",
             "}"
         });
+    }
+
+    private string BuildConstructorArguments(ClassInfo targetClass)
+    {
+        if (targetClass.ConstructorParameters.Count == 0)
+            return string.Empty;
+
+        var args = targetClass.ConstructorParameters
+            .Select(CreateConstructorArgument);
+
+        return Environment.NewLine +
+            string.Join("," + Environment.NewLine, args.Select(a => $"            {a}"));
+    }
+
+    private string CreateConstructorArgument(Models.ParameterInfo param)
+    {
+        var type = param.Type;
+
+        if (IsLoggerType(type))
+        {
+            var innerType = ExtractGenericArgument(type);
+            return $"Microsoft.Extensions.Logging.Abstractions.NullLogger<{innerType}>.Instance";
+        }
+
+        if (IsOptionsType(type))
+        {
+            var innerType = ExtractGenericArgument(type);
+            return $"Options.Create(new {innerType}())";
+        }
+
+        if (IsMemoryCacheType(type))
+        {
+            return "new MemoryCache(new MemoryCacheOptions())";
+        }
+
+        return CreateDefaultArgument(type);
+    }
+
+    private static bool CanProvideConstructorParameter(Models.ParameterInfo param)
+    {
+        var type = param.Type;
+        if (IsLoggerType(type)) return true;
+        if (IsOptionsType(type)) return true;
+        if (IsMemoryCacheType(type)) return true;
+        // Simple value types
+        if (type is "string" or "System.String") return true;
+        if (type is "int" or "System.Int32") return true;
+        if (type is "long" or "System.Int64") return true;
+        if (type is "bool" or "System.Boolean") return true;
+        if (type is "double" or "System.Double") return true;
+        if (type is "float" or "System.Single") return true;
+        if (type is "decimal" or "System.Decimal") return true;
+        return false;
+    }
+
+    private static bool IsLoggerType(string type) =>
+        type.StartsWith("Microsoft.Extensions.Logging.ILogger<");
+
+    private static bool IsOptionsType(string type) =>
+        type.StartsWith("Microsoft.Extensions.Options.IOptions<");
+
+    private static bool IsMemoryCacheType(string type) =>
+        type == "Microsoft.Extensions.Caching.Memory.IMemoryCache";
+
+    private static string ExtractGenericArgument(string genericType)
+    {
+        var start = genericType.IndexOf('<') + 1;
+        var end = genericType.LastIndexOf('>');
+        return genericType.Substring(start, end - start);
     }
 
     private string BuildMethodInvocation(Models.MethodInfo methodData)
@@ -278,7 +521,7 @@ internal class CodeTemplateBuilder
     {
         // Match exact type names to avoid false positives
         var normalizedType = typeIdentifier.Trim();
-        
+
         if (normalizedType == "string" || normalizedType == "System.String") return "\"sample\"";
         if (normalizedType == "int" || normalizedType == "System.Int32") return "42";
         if (normalizedType == "long" || normalizedType == "System.Int64") return "42L";
@@ -288,7 +531,7 @@ internal class CodeTemplateBuilder
         if (normalizedType == "decimal" || normalizedType == "System.Decimal") return "42m";
         if (normalizedType == "DateTime" || normalizedType == "System.DateTime") return "DateTime.UtcNow";
         if (normalizedType == "Guid" || normalizedType == "System.Guid") return "Guid.NewGuid()";
-        
+
         return "default";
     }
 }
