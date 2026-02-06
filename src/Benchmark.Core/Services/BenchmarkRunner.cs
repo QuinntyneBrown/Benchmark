@@ -107,7 +107,8 @@ public class BenchmarkRunner : IBenchmarkRunner
                         result.Method = method.GetString() ?? string.Empty;
                     }
 
-                    if (benchmark.TryGetProperty("Statistics", out var stats))
+                    if (benchmark.TryGetProperty("Statistics", out var stats) &&
+                        stats.ValueKind == JsonValueKind.Object)
                     {
                         if (stats.TryGetProperty("Mean", out var mean))
                         {
@@ -120,9 +121,11 @@ public class BenchmarkRunner : IBenchmarkRunner
                         }
                     }
 
-                    if (benchmark.TryGetProperty("Memory", out var memory))
+                    if (benchmark.TryGetProperty("Memory", out var memory) &&
+                        memory.ValueKind == JsonValueKind.Object)
                     {
-                        if (memory.TryGetProperty("BytesAllocatedPerOperation", out var allocated))
+                        if (memory.TryGetProperty("BytesAllocatedPerOperation", out var allocated) &&
+                            allocated.ValueKind == JsonValueKind.Number)
                         {
                             result.AllocatedBytes = allocated.GetDouble();
                         }

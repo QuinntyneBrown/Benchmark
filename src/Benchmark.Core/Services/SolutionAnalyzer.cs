@@ -157,7 +157,8 @@ public class SolutionAnalyzer : ISolutionAnalyzer
             Name = symbolForClass.Name,
             Namespace = symbolForClass.ContainingNamespace?.ToDisplayString() ?? string.Empty,
             FullName = symbolForClass.ToDisplayString(),
-            IsPublic = true
+            IsPublic = true,
+            IsStatic = symbolForClass.IsStatic
         };
 
         // Extract constructor parameters from the first public constructor
@@ -222,7 +223,8 @@ public class SolutionAnalyzer : ISolutionAnalyzer
         {
             Name = methodSymbol.Name,
             ReturnType = returnTypeName,
-            IsAsync = isAsyncMethod
+            IsAsync = isAsyncMethod,
+            HasGenericTypeParameters = methodSymbol.IsGenericMethod
         };
 
         foreach (var paramSymbol in methodSymbol.Parameters)

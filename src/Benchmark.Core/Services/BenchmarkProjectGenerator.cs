@@ -119,6 +119,7 @@ internal class ProjectFileWriter
             "    <TargetFramework>net9.0</TargetFramework>",
             "    <ImplicitUsings>enable</ImplicitUsings>",
             "    <Nullable>enable</Nullable>",
+            "    <NoWarn>$(NoWarn);NU1605</NoWarn>",
             "  </PropertyGroup>",
             "",
             "  <ItemGroup>",
@@ -186,6 +187,10 @@ internal class CodeTemplateBuilder
         if (targetClass.IsInfrastructureClass)
             return null;
 
+        // Skip static classes (cannot be instantiated)
+        if (targetClass.IsStatic)
+            return null;
+
         // Skip classes whose constructor parameters we cannot provide
         if (!targetClass.ConstructorParameters.All(CanProvideConstructorParameter))
             return null;
@@ -223,6 +228,10 @@ internal class CodeTemplateBuilder
 
         foreach (var methodData in targetClass.PublicMethods)
         {
+            // Skip generic methods (type arguments cannot be inferred from default values)
+            if (methodData.HasGenericTypeParameters)
+                continue;
+
             var isAsyncEnumerable = methodData.ReturnType.Contains("IAsyncEnumerable");
 
             lines.Add("    [Benchmark]");
@@ -272,7 +281,7 @@ internal class CodeTemplateBuilder
 
     private string CreateHttpGetE2ESource(ProjectInfo webProject)
     {
-        var anchorClass = webProject.Classes.FirstOrDefault();
+        var anchorClass = webProject.Classes.FirstOrDefault(c => !c.IsStatic);
         var anchorType = anchorClass?.FullName ?? $"{webProject.Name}.Program";
         var safeName = webProject.Name.Replace(".", "");
 
@@ -314,7 +323,7 @@ internal class CodeTemplateBuilder
 
     private string CreateSignalRE2ESource(ProjectInfo webProject, Models.HubEndpointInfo hub)
     {
-        var anchorClass = webProject.Classes.FirstOrDefault();
+        var anchorClass = webProject.Classes.FirstOrDefault(c => !c.IsStatic);
         var anchorType = anchorClass?.FullName ?? $"{webProject.Name}.Program";
         var safeName = webProject.Name.Replace(".", "");
 

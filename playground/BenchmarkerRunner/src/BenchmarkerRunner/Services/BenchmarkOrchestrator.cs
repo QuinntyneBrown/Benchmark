@@ -104,22 +104,22 @@ public class BenchmarkOrchestrator : IBenchmarkOrchestrator
     {
         // Step 1: Copy solution to artifacts
         _logger.LogInformation("Step 1/5: Copying solution to artifacts...");
-        var copiedSlnxPath = _solutionCopier.CopySolutionToArtifacts(solutionPath, _options.ArtifactsDirectory);
-        var artifactDir = Path.GetDirectoryName(copiedSlnxPath)!;
+        var copiedSolutionPath = _solutionCopier.CopySolutionToArtifacts(solutionPath, _options.ArtifactsDirectory);
+        var artifactDir = Path.GetDirectoryName(copiedSolutionPath)!;
 
         // Step 2: Analyze solution
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogInformation("Step 2/5: Analyzing solution...");
-        var projects = await _solutionAnalyzer.AnalyzeSolutionAsync(copiedSlnxPath);
+        var projects = await _solutionAnalyzer.AnalyzeSolutionAsync(copiedSolutionPath);
         _logger.LogInformation("Discovered {Count} projects with public APIs", projects.Count);
 
         // Step 3: Generate benchmark projects
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogInformation("Step 3/5: Generating benchmark projects...");
-        var unitBenchmarkPath = await _projectGenerator.GenerateUnitBenchmarkProjectAsync(copiedSlnxPath, projects);
+        var unitBenchmarkPath = await _projectGenerator.GenerateUnitBenchmarkProjectAsync(copiedSolutionPath, projects);
         _logger.LogInformation("Unit benchmarks generated at: {Path}", unitBenchmarkPath);
 
-        var e2eBenchmarkPath = await _projectGenerator.GenerateE2EBenchmarkProjectAsync(copiedSlnxPath, projects);
+        var e2eBenchmarkPath = await _projectGenerator.GenerateE2EBenchmarkProjectAsync(copiedSolutionPath, projects);
         _logger.LogInformation("E2E benchmarks generated at: {Path}", e2eBenchmarkPath);
 
         // Step 4: Run benchmarks

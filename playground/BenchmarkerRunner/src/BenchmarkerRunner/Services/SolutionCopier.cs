@@ -20,6 +20,7 @@ public class SolutionCopier : ISolutionCopier
         }
 
         var solutions = Directory.GetFiles(solutionsDirectory, "*.slnx", SearchOption.AllDirectories)
+            .Concat(Directory.GetFiles(solutionsDirectory, "*.sln", SearchOption.AllDirectories))
             .OrderBy(s => s)
             .ToList();
 
@@ -38,6 +39,7 @@ public class SolutionCopier : ISolutionCopier
         if (Directory.Exists(targetDir))
         {
             _logger.LogInformation("Cleaning existing artifact folder: {Directory}", targetDir);
+            ClearReadOnlyAttributes(targetDir);
             Directory.Delete(targetDir, recursive: true);
         }
 
@@ -47,6 +49,18 @@ public class SolutionCopier : ISolutionCopier
         var copiedSlnxPath = Path.Combine(targetDir, Path.GetFileName(solutionPath));
         _logger.LogInformation("Solution copied successfully: {Path}", copiedSlnxPath);
         return copiedSlnxPath;
+    }
+
+    private static void ClearReadOnlyAttributes(string directory)
+    {
+        foreach (var file in Directory.GetFiles(directory, "*", SearchOption.AllDirectories))
+        {
+            var attrs = File.GetAttributes(file);
+            if (attrs.HasFlag(FileAttributes.ReadOnly))
+            {
+                File.SetAttributes(file, attrs & ~FileAttributes.ReadOnly);
+            }
+        }
     }
 
     private void CopyDirectoryRecursive(string sourceDir, string targetDir)
@@ -63,9 +77,10 @@ public class SolutionCopier : ISolutionCopier
         {
             var dirName = Path.GetFileName(subDir);
 
-            // Skip bin/ and obj/ directories to keep artifacts clean
+            // Skip bin/, obj/, and .git directories to keep artifacts clean
             if (string.Equals(dirName, "bin", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(dirName, "obj", StringComparison.OrdinalIgnoreCase))
+                string.Equals(dirName, "obj", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(dirName, ".git", StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

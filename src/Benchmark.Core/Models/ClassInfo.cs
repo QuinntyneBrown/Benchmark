@@ -8,5 +8,6 @@ public class ClassInfo
     public List<MethodInfo> PublicMethods { get; set; } = new();
     public List<ParameterInfo> ConstructorParameters { get; set; } = new();
     public bool IsPublic { get; set; }
+    public bool IsStatic { get; set; }
     public bool IsInfrastructureClass { get; set; }
 }
