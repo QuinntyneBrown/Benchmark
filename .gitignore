@@ -1,0 +1,32 @@
+## .NET Core
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.lock.json
+
+## Visual Studio
+.vs/
+.vscode/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+## Test results
+TestResults/
+*.trx
+
+## Benchmark results
+BenchmarkDotNet.Artifacts/
