@@ -20,7 +20,7 @@ public class BenchmarkRunner : IBenchmarkRunner
             var processInfo = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = "run -c Release --exporters json",
+                Arguments = "run -c Release -- --exporters json",
                 WorkingDirectory = projectPath,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
