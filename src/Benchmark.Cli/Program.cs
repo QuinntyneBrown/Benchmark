@@ -64,12 +64,15 @@ public class Program
     {
         services.AddSingleton<ISolutionAnalyzer, SolutionAnalyzer>();
         services.AddSingleton<IBenchmarkProjectGenerator, BenchmarkProjectGenerator>();
+        services.AddSingleton<IBenchmarkRunner, BenchmarkRunner>();
+        services.AddSingleton<IReportGenerator, ReportGenerator>();
     }
 
     private static RootCommand ConstructCommandHierarchy()
     {
         var rootCmd = new RootCommand("Benchmark project generator for .NET solutions");
         rootCmd.AddCommand(new GenerateBenchmarksCommand());
+        rootCmd.AddCommand(new RunAndReportCommand());
         return rootCmd;
     }
 }
