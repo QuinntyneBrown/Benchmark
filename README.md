@@ -1,59 +1,61 @@
 # Benchmark
 
-A powerful CLI tool for automatically generating BenchmarkDotNet projects for .NET solutions.
+A powerful CLI tool for automatically generating BenchmarkDotNet projects and performance reports for .NET solutions.
 
 ## Features
 
 - **Unit Benchmark Generation**: Automatically creates benchmarks for every public class and method in your solution
 - **E2E Benchmark Generation**: Creates end-to-end benchmarks for Web APIs (using WebApplicationFactory) and Console applications
-- **Benchmark Results Reporting**: Run benchmarks and automatically generate comprehensive markdown reports with performance metrics, throughput analysis, and quality insights
+- **SignalR E2E Detection**: Automatically discovers SignalR hubs and generates full message round-trip benchmarks
+- **Benchmark Results Reporting**: Run benchmarks and generate comprehensive markdown reports with performance metrics, throughput analysis, and quality insights
+- **Dual Reports**: Technical report for developers and product owner report for stakeholders
 - **File-Per-Command Architecture**: Uses System.CommandLine with proper separation of concerns
 - **Microsoft Extensions Integration**: Built with DI, Configuration, Logging, and Options pattern
 - **BenchmarkDotNet Integration**: Generates projects ready to run with BenchmarkDotNet
 
 ## Installation
 
-Build the CLI tool:
+Install as a global .NET tool:
 
 ```bash
-dotnet build
+dotnet tool install -g QuinntyneBrown.Benchmark.Cli
+```
+
+Update to the latest version:
+
+```bash
+dotnet tool update -g QuinntyneBrown.Benchmark.Cli
 ```
 
 ## Usage
 
 ### Generate Benchmarks
 
-To generate both unit and E2E benchmark projects for your solution:
-
 ```bash
-dotnet run --project src/Benchmark.Cli -- generate <path-to-solution.sln>
+bn generate <path-to-solution>
 ```
+
+This generates both unit and E2E benchmark projects for your solution. Accepts both `.sln` and `.slnx` solution files.
 
 ### Run Benchmarks and Generate Reports
 
-To generate benchmarks, run them, and create a comprehensive markdown report in one command:
-
 ```bash
-dotnet run --project src/Benchmark.Cli -- run-and-report <path-to-solution.sln>
+bn run-and-report <path-to-solution>
 ```
 
 Specify a custom output path for the report:
 
 ```bash
-dotnet run --project src/Benchmark.Cli -- run-and-report <path-to-solution.sln> --output ./reports/benchmark-results.md
+bn run-and-report <path-to-solution> --output ./reports/benchmark-results.md
 ```
 
 This command will:
 1. Generate unit and E2E benchmark projects
 2. Run all benchmarks (this may take several minutes)
 3. Collect and analyze results
-4. Generate a comprehensive markdown report with:
-   - Executive summary with total benchmarks and success rates
-   - Performance overview with average throughput and memory usage
-   - Detailed metrics for each benchmark project
-   - Quality analysis identifying fastest/slowest operations
-   - Performance warnings for high memory or slow operations
-   - Interpretation guide for understanding the metrics
+4. Generate two comprehensive markdown reports:
+   - **BenchmarkReport.md** — detailed metrics for developers
+   - **ProductOwnerReport.md** — health summary for stakeholders
 
 ### What Gets Generated
 
@@ -74,16 +76,12 @@ cd {SolutionName}.E2EBenchmarks
 dotnet run -c Release
 ```
 
-### Example Report Output
+## Documentation
 
-The generated markdown report includes:
-
-- **Executive Summary**: Overview of benchmark runs and total operations tested
-- **Performance Overview**: Average throughput and memory allocation statistics
-- **Detailed Metrics Tables**: Mean execution time, standard deviation, throughput, and memory for each benchmark
-- **Quality Analysis**: Identification of fastest, slowest, and most memory-intensive operations
-- **Performance Warnings**: Automatic detection of operations exceeding performance thresholds
-- **Interpretation Guide**: Help understanding the metrics and performance categories
+- [Getting Started](docs/getting-started.md) — installation, prerequisites, and quick start
+- [Command Reference](docs/commands.md) — full CLI reference for all commands
+- [Interpreting Reports](docs/interpreting-reports.md) — how to read metrics, categories, and verdicts
+- [Architecture](docs/architecture.md) — how the tool works internally
 
 ## Project Structure
 
@@ -97,6 +95,7 @@ The generated markdown report includes:
 │       ├── Models/             # Domain models
 │       ├── Services/           # Service implementations
 │       └── Generators/         # Code generation utilities
+├── docs/                       # User guides and reference documentation
 └── Benchmark.sln
 ```
 
@@ -113,7 +112,7 @@ The generated markdown report includes:
 ## Requirements
 
 - .NET 9.0 or later
-- A valid .NET solution file (.sln)
+- A valid .NET solution file (.sln or .slnx)
 
 ## Examples
 

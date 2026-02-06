@@ -540,6 +540,46 @@ internal class SolutionManager
 {
     public void IntegrateProjectIntoSolution(string solutionFilePath, string projectFilePath)
     {
+        var isSlnx = Path.GetExtension(solutionFilePath).Equals(".slnx", StringComparison.OrdinalIgnoreCase);
+
+        if (isSlnx)
+        {
+            IntegrateProjectIntoSlnx(solutionFilePath, projectFilePath);
+        }
+        else
+        {
+            IntegrateProjectViaDotnetCli(solutionFilePath, projectFilePath);
+        }
+    }
+
+    private void IntegrateProjectIntoSlnx(string slnxFilePath, string projectFilePath)
+    {
+        var solutionDir = Path.GetDirectoryName(slnxFilePath)
+            ?? throw new InvalidOperationException($"Cannot determine directory for: {slnxFilePath}");
+
+        var relativePath = Path.GetRelativePath(solutionDir, projectFilePath).Replace('\\', '/');
+
+        var doc = System.Xml.Linq.XDocument.Load(slnxFilePath);
+        var root = doc.Root
+            ?? throw new InvalidOperationException($"Invalid .slnx file: {slnxFilePath}");
+
+        // Check if the project is already in the solution
+        var alreadyExists = root.Descendants("Project")
+            .Any(p => string.Equals(
+                p.Attribute("Path")?.Value?.Replace('\\', '/'),
+                relativePath,
+                StringComparison.OrdinalIgnoreCase));
+
+        if (!alreadyExists)
+        {
+            root.Add(new System.Xml.Linq.XElement("Project",
+                new System.Xml.Linq.XAttribute("Path", relativePath)));
+            doc.Save(slnxFilePath);
+        }
+    }
+
+    private void IntegrateProjectViaDotnetCli(string solutionFilePath, string projectFilePath)
+    {
         var processInfo = new System.Diagnostics.ProcessStartInfo
         {
             FileName = "dotnet",
@@ -555,14 +595,15 @@ internal class SolutionManager
         {
             throw new InvalidOperationException("Failed to start dotnet process");
         }
-        
+
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        
+
         if (process.ExitCode != 0)
         {
-            var errorOutput = process.StandardError.ReadToEnd();
             throw new InvalidOperationException(
-                $"Failed to add project to solution. Exit code: {process.ExitCode}. Error: {errorOutput}");
+                $"Failed to add project to solution. Exit code: {process.ExitCode}. Error: {stderr}");
         }
     }
 }

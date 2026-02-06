@@ -10,7 +10,7 @@ public class RunAndReportCommand : Command
     {
         var pathArg = new Argument<string>(
             name: "solution-path",
-            description: "Path to the .NET solution file (.sln)");
+            description: "Path to the .NET solution file (.sln or .slnx)");
 
         var outputOption = new Option<string>(
             name: "--output",

@@ -93,6 +93,14 @@ public class SolutionAnalyzer : ISolutionAnalyzer
         {
             throw new FileNotFoundException($"Cannot locate solution at: {filePath}");
         }
+
+        var extension = Path.GetExtension(filePath);
+        if (!extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) &&
+            !extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Unsupported solution file format '{extension}'. Expected .sln or .slnx: {filePath}");
+        }
     }
 
     private async Task<ProjectInfoModel?> ExtractProjectDetailsAsync(Project projectToAnalyze)

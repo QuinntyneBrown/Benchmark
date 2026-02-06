@@ -5,6 +5,20 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- dotnet tool packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>bn</ToolCommandName>
+
+    <!-- NuGet metadata -->
+    <PackageId>QuinntyneBrown.Benchmark.Cli</PackageId>
+    <Version>1.1.0</Version>
+    <Authors>QuinntyneBrown</Authors>
+    <Description>CLI tool for auto-generating BenchmarkDotNet projects and performance reports for .NET solutions</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/QuinntyneBrown/Benchmark</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/QuinntyneBrown/Benchmark</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +38,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
