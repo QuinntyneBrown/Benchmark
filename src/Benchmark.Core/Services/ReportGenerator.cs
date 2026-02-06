@@ -75,8 +75,9 @@ public class ReportGenerator : IReportGenerator
                 markdown.AppendLine("### Quality Analysis");
                 markdown.AppendLine();
 
-                var fastestBenchmark = summary.Results.OrderBy(r => r.MeanNanoseconds).First();
-                var slowestBenchmark = summary.Results.OrderBy(r => r.MeanNanoseconds).Last();
+                var orderedResults = summary.Results.OrderBy(r => r.MeanNanoseconds).ToList();
+                var fastestBenchmark = orderedResults.First();
+                var slowestBenchmark = orderedResults.Last();
                 var mostMemoryIntensive = summary.Results.OrderByDescending(r => r.AllocatedBytes).First();
 
                 markdown.AppendLine($"**Fastest Operation:**");

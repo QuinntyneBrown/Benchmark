@@ -1,4 +1,5 @@
 using Benchmark.Core.Models;
+using Microsoft.Extensions.Logging;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -6,6 +7,12 @@ namespace Benchmark.Core.Services;
 
 public class BenchmarkRunner : IBenchmarkRunner
 {
+    private readonly ILogger<BenchmarkRunner>? _logger;
+
+    public BenchmarkRunner(ILogger<BenchmarkRunner>? logger = null)
+    {
+        _logger = logger;
+    }
     public async Task<BenchmarkSummary> RunBenchmarksAsync(string projectPath)
     {
         var summary = new BenchmarkSummary
@@ -122,7 +129,7 @@ public class BenchmarkRunner : IBenchmarkRunner
         catch (Exception ex)
         {
             // Log error but continue processing other files
-            Console.WriteLine($"Error parsing {jsonFilePath}: {ex.Message}");
+            _logger?.LogWarning(ex, "Error parsing benchmark results file: {FilePath}", jsonFilePath);
         }
 
         return results;
